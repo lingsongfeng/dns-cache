@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <span>
 #include <string>
 #include <variant>
@@ -71,6 +72,8 @@ struct SocketAddr {
   std::variant<SocketAddrV4, SocketAddrV6> addr;
 };
 
+// thread safe because the class only holds a fd
+// TODO(lingsong.feng): release fd when destructuring
 class UDPSocket {
 private:
   UDPSocket();
@@ -78,8 +81,7 @@ private:
 public:
   static Result<UDPSocket> Bind(SocketAddr addr);
 
-  // auto [number_of_bytes, addr] = recv_from().unwrap()
-  Result<std::pair<std::uint64_t, SocketAddr>> RecvFrom(std::span<uint8_t> buffer);
+  std::optional<std::pair<std::uint64_t, SocketAddr>> RecvFrom(std::span<uint8_t> buffer);
 
   Result<std::uint64_t> SendTo(std::span<uint8_t> buffer, const SocketAddr& addr);
 

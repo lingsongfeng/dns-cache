@@ -13,7 +13,7 @@ add_compile_options(-Wthread-safety)
 add_link_options(-Wthread-safety)
 
 
-add_executable(dns_cache main.cpp)
+add_executable(dns_cache main.cpp dns_cache.cpp gateway.cpp)
 
 
 ##### libraries

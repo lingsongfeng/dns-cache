@@ -69,6 +69,20 @@ consume_n_u8(const uint8_t **data, uint32_t *len, uint32_t n) {
   return ret;
 }
 
+[[nodiscard("result should be used")]] inline std::optional<std::string>
+consume_n_u8_to_string(const uint8_t **data, uint32_t *len, uint32_t n) {
+  if (*len < n) {
+    return {};
+  }
+  std::string ret;
+  for (uint32_t i = 0; i < n; i++) {
+    ret.push_back(static_cast<char>((*data)[i]));
+  }
+  (*data) += n;
+  (*len) -= n;
+  return ret;
+}
+
 std::optional<std::string> consume_dns_name_impl(const uint8_t **data,
                                                  uint32_t *len) {
   uint8_t s_length;
@@ -99,6 +113,7 @@ std::optional<std::string> consume_dns_name_impl(const uint8_t **data,
   return name;
 }
 
+// TODO(lingsong.feng): support multiple jumps
 std::optional<std::string> consume_dns_name(const uint8_t **data, uint32_t *len,
                                             const uint8_t *packet_begin,
                                             uint32_t packet_len) {
@@ -127,12 +142,79 @@ std::optional<std::string> consume_dns_name(const uint8_t **data, uint32_t *len,
   }
 }
 
+// return true if success
+bool consume_dns_name_impl_v2(const uint8_t **data, uint32_t *len,
+                              const uint8_t *const packet_begin,
+                              const uint32_t packet_len, std::string &s) {
+  //printf("idx:%ld\n", *data - packet_begin);
+  std::string ret;
+  while (true) {
+    // TODO(lingsong.feng): use const threshold
+    if (s.size() >= 75) {
+      return false;
+    }
+    uint8_t s_length;
+    if (auto s_length_opt = consume_one_u8(data, len)) {
+      s_length = *s_length_opt;
+    } else {
+      return false;
+    }
+    if (s_length == 0x0) {
+      break;
+    }
+
+    if (s_length < 0xc0) {
+      if (auto s_opt = consume_n_u8_to_string(data, len, s_length)) {
+        s += *s_opt;
+        s.push_back('.');
+      } else {
+        return false;
+      }
+    } else {
+      uint8_t next_u8;
+      if (auto next_u8_opt = consume_one_u8(data, len)) {
+        next_u8 = *next_u8_opt;
+      } else {
+        return false;
+      }
+      uint16_t offset = net_u8_to_u16(s_length, next_u8) & 0b0011111111111111;
+      //printf("%hu\n", offset);
+      const uint8_t *start_pos = packet_begin + offset;
+      uint32_t packet_len_remains = packet_len - offset;
+      if (consume_dns_name_impl_v2(&start_pos, &packet_len_remains,
+                                   packet_begin, packet_len, s)) {
+        break;
+      } else {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+std::optional<std::string> consume_dns_name_v2(const uint8_t **data,
+                                               uint32_t *len,
+                                               const uint8_t *packet_begin,
+                                               uint32_t packet_len) {
+  std::string ret;
+  if (consume_dns_name_impl_v2(data, len, packet_begin, packet_len, ret)) {
+    if (!ret.empty())
+      ret.pop_back();
+    //printf("%s\n", ret.c_str());
+    return ret;
+  } else {
+    //printf("error: %s\n", ret.c_str());
+    return {};
+  }
+}
+
 std::optional<dns_question> ParseDNSRawQuestion(const uint8_t **data,
                                                 uint32_t *len,
                                                 const uint8_t *packet_begin,
                                                 uint32_t packet_len) {
   std::string name;
-  if (auto name_opt = consume_dns_name(data, len, packet_begin, packet_len)) {
+  if (auto name_opt =
+          consume_dns_name_v2(data, len, packet_begin, packet_len)) {
     name = std::move(*name_opt);
   } else {
     return {};
@@ -163,7 +245,8 @@ std::optional<dns_answer> ParseDNSRawAnswer(const uint8_t **data, uint32_t *len,
                                             const uint8_t *packet_begin,
                                             uint32_t packet_len) {
   std::string name;
-  if (auto name_opt = consume_dns_name(data, len, packet_begin, packet_len)) {
+  if (auto name_opt =
+          consume_dns_name_v2(data, len, packet_begin, packet_len)) {
     name = std::move(*name_opt);
   } else {
     return {};
@@ -279,17 +362,11 @@ void TestParseAnswer() {
 }
 */
 std::optional<DNSPacket> ParseDNSRawPacket(const uint8_t *data, uint32_t len) {
-  printf("print begin\n");
-  for (int i = 0; i < len; i++) {
-    printf("%x ", data[i]);
-  }
-  printf("\nprint end\n");
   const uint8_t *packet_begin = data;
-  uint32_t packet_len = len;
+  const uint32_t packet_len = len;
 
   DNSPacket packet;
 
-  uint16_t id;
   if (auto id_opt = consume_two_u8(&data, &len)) {
     packet.header.id = *id_opt;
   } else {
@@ -304,30 +381,30 @@ std::optional<DNSPacket> ParseDNSRawPacket(const uint8_t *data, uint32_t len) {
   }
   packet.header.flag.from_host(flag);
 
-/*
-  uint8_t flag_1, flag_2;
-  if (auto flag_opt = consume_one_u8(&data, &len)) {
-    flag_1 = *flag_opt;
-  } else {
-    return {};
-  }
-  if (auto flag_opt = consume_one_u8(&data, &len)) {
-    flag_2 = *flag_opt;
-  } else {
-    return {};
-  }
+  /*
+    uint8_t flag_1, flag_2;
+    if (auto flag_opt = consume_one_u8(&data, &len)) {
+      flag_1 = *flag_opt;
+    } else {
+      return {};
+    }
+    if (auto flag_opt = consume_one_u8(&data, &len)) {
+      flag_2 = *flag_opt;
+    } else {
+      return {};
+    }
 
-  packet.header.qr = (flag_1 & 0b10000000) >> 7;
-  packet.header.opcode = (flag_1 & 0b01111000) >> 3;
-  packet.header.aa = (flag_1 & 0b00000100) >> 2;
-  packet.header.tc = (flag_1 & 0b00000010) >> 1;
-  packet.header.rd = flag_1 & 0b00000001;
+    packet.header.qr = (flag_1 & 0b10000000) >> 7;
+    packet.header.opcode = (flag_1 & 0b01111000) >> 3;
+    packet.header.aa = (flag_1 & 0b00000100) >> 2;
+    packet.header.tc = (flag_1 & 0b00000010) >> 1;
+    packet.header.rd = flag_1 & 0b00000001;
 
-  packet.header.ra = (flag_2 & 0b10000000) >> 7;
-  ;
-  packet.header.z = (flag_2 & 0b01110000) >> 4;
-  packet.header.rcode = (flag_2 & 0b00001111);
-  */
+    packet.header.ra = (flag_2 & 0b10000000) >> 7;
+    ;
+    packet.header.z = (flag_2 & 0b01110000) >> 4;
+    packet.header.rcode = (flag_2 & 0b00001111);
+    */
 
   uint16_t qdcount;
   if (auto qdcount_opt = consume_two_u8(&data, &len)) {
@@ -384,7 +461,7 @@ void append_u16_to_net(std::vector<uint8_t> &v, uint16_t val) {
   v.push_back(0);
   int idx = v.size() - 2;
   uint16_t *ptr = reinterpret_cast<uint16_t *>(&v[idx]);
-  *ptr = val;
+  *ptr = net_val;
 }
 
 void append_u32_to_net(std::vector<uint8_t> &v, uint32_t val) {
@@ -395,7 +472,7 @@ void append_u32_to_net(std::vector<uint8_t> &v, uint32_t val) {
   v.push_back(0);
   int idx = v.size() - 4;
   uint32_t *ptr = reinterpret_cast<uint32_t *>(&v[idx]);
-  *ptr = val;
+  *ptr = net_val;
 }
 
 void append_bytes(std::vector<uint8_t> &v, std::span<const uint8_t> data) {
@@ -431,7 +508,7 @@ void append_dns_name(std::vector<uint8_t> &v, const std::string &name) {
 std::vector<uint8_t> GenerateDNSRawPacket(const DNSPacket &packet) {
   std::vector<uint8_t> ret;
   append_u16_to_net(ret, packet.header.id);
-  append_u16_to_net(ret, packet.header.flag.to_host()); // TODO(lingsong.feng): use real flag
+  append_u16_to_net(ret, packet.header.flag.to_host());
   append_u16_to_net(ret, packet.header.qdcount);
   append_u16_to_net(ret, packet.header.ancount);
   append_u16_to_net(ret, packet.header.nscount);
@@ -457,15 +534,52 @@ std::vector<uint8_t> GenerateDNSRawPacket(const DNSPacket &packet) {
 
 void TestParsePacket() {
   std::vector<uint8_t> data{
-      0xdb, 0x42, 0x81, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00,
-      0x00, 0x03, 0x77, 0x77, 0x77, 0x0c, 0x6e, 0x6f, 0x72, 0x74, 0x68,
-      0x65, 0x61, 0x73, 0x74, 0x65, 0x72, 0x6e, 0x03, 0x65, 0x64, 0x75,
-      0x00, 0x00, 0x01, 0x00, 0x01, 0xc0, 0x0c, 0x00, 0x01, 0x00, 0x01,
-      0x00, 0x00, 0x02, 0x58, 0x00, 0x04, 0x9b, 0x21, 0x11, 0x44};
+      0x77, 0x92, 0x81, 0x80, 0x00, 0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00,
+      0x03, 0x77, 0x77, 0x77, 0x04, 0x73, 0x6f, 0x68, 0x75, 0x03, 0x63, 0x6f,
+      0x6d, 0x00, 0x00, 0x01, 0x00, 0x01, 0xc0, 0x0c, 0x00, 0x05, 0x00, 0x01,
+      0x00, 0x00, 0x02, 0xed, 0x00, 0x19, 0x03, 0x77, 0x77, 0x77, 0x04, 0x73,
+      0x6f, 0x68, 0x75, 0x03, 0x63, 0x6f, 0x6d, 0x03, 0x64, 0x73, 0x61, 0x05,
+      0x64, 0x6e, 0x73, 0x76, 0x31, 0xc0, 0x15, 0xc0, 0x2a, 0x00, 0x05, 0x00,
+      0x01, 0x00, 0x00, 0x00, 0x65, 0x00, 0x1d, 0x04, 0x62, 0x65, 0x73, 0x74,
+      0x05, 0x73, 0x63, 0x68, 0x65, 0x64, 0x05, 0x64, 0x30, 0x2d, 0x64, 0x6b,
+      0x07, 0x74, 0x64, 0x6e, 0x73, 0x64, 0x70, 0x31, 0x02, 0x63, 0x6e, 0x00,
+      0xc0, 0x4f, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x21, 0x00, 0x28,
+      0x04, 0x62, 0x65, 0x73, 0x74, 0x05, 0x35, 0x31, 0x2d, 0x36, 0x35, 0x03,
+      0x63, 0x6a, 0x74, 0x08, 0x73, 0x64, 0x79, 0x74, 0x75, 0x6e, 0x74, 0x78,
+      0x0a, 0x64, 0x69, 0x61, 0x6e, 0x73, 0x75, 0x2d, 0x63, 0x64, 0x6e, 0x03,
+      0x6e, 0x65, 0x74, 0x00, 0xc0, 0x78, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+      0x00, 0x2d, 0x00, 0x04, 0x7b, 0x7d, 0xf4, 0x6b};
   auto opt = ParseDNSRawPacket(&data[0], data.size());
   if (opt.has_value()) {
     printf("%s\n", opt->answers[0].name.c_str());
   } else {
     printf("parse failed\n");
   }
+}
+
+void PrintDNSPacket(const DNSPacket &packet) {
+  printf("id:0x%04hx\n", packet.header.id);
+  printf("qr:%hhu opcode:%hhu aa:%hhu tc:%hhu rd:%hhu ra:%hhu z:%hhu "
+         "rcode:%hhu\n",
+         packet.header.flag.qr, packet.header.flag.opcode,
+         packet.header.flag.aa, packet.header.flag.tc, packet.header.flag.rd,
+         packet.header.flag.ra, packet.header.flag.z, packet.header.flag.rcode);
+  printf("qdcount:%hu ancount:%hu nscount:%hu arcount:%hu\n",
+         packet.header.qdcount, packet.header.ancount, packet.header.nscount,
+         packet.header.arcount);
+  printf("questions:\n");
+  for (const dns_question &q : packet.questions) {
+    printf("    %s type:%hu class:%hu\n", q.qname.c_str(), q.qtype, q.qclass);
+  }
+  printf("answers:\n");
+  for (const dns_answer &ans : packet.answers) {
+    printf("    %s type:%hu class:%hu ", ans.name.c_str(), ans.type, ans.ans_class);
+    printf("ttl:%u rdlength:%hu data:[", ans.ttl, ans.rdlength);
+    for (uint8_t byte : ans.rdata) {
+      printf("%02hhx ", byte);
+    }
+    printf("]\n");
+  }
+
+  printf("\n");
 }

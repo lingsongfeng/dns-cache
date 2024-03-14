@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <cstdio>
 #include <netinet/in.h>
+#include <optional>
 #include <string>
 #include <sys/_types/_socklen_t.h>
 #include <sys/socket.h>
@@ -62,7 +63,7 @@ Result<UDPSocket> UDPSocket::Bind(SocketAddr addr) {
 
 UDPSocket::UDPSocket() = default;
 
-Result<std::pair<std::uint64_t, SocketAddr>>
+std::optional<std::pair<std::uint64_t, SocketAddr>>
 UDPSocket::RecvFrom(std::span<uint8_t> buffer) {
 
   struct sockaddr_in client_addr;
@@ -85,10 +86,11 @@ UDPSocket::RecvFrom(std::span<uint8_t> buffer) {
 
   SocketAddr socket_addr(addr_v4);
 
-  return Result<std::pair<std::uint64_t, SocketAddr>>::Ok(
-      {bytes_received, socket_addr});
+  return 
+      {{bytes_received, socket_addr}};
 }
 
+// TODO(lingsong.feng): thread safety check
 Result<std::uint64_t> UDPSocket::SendTo(std::span<uint8_t> buffer, const SocketAddr& addr) {
   struct sockaddr_in dst_addr;
   socklen_t addr_len = sizeof(dst_addr);
@@ -102,10 +104,10 @@ Result<std::uint64_t> UDPSocket::SendTo(std::span<uint8_t> buffer, const SocketA
   printf("send addr=%s port=%hu\n", addr_s.c_str(), v4_addr.port);
 
   uint64_t rv = sendto(socket_fd_, &buffer[0], buffer.size(), 0, (const struct sockaddr*)&dst_addr, addr_len);
-  printf("rv=%llu\n", rv);
+  // printf("rv=%llu\n", rv);
 
   // TODO: return value
-  
+  return Result<std::uint64_t>::Ok(0);
 }
 
 } // namespace base

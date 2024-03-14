@@ -46,6 +46,8 @@ private:
   std::mutex mutex_;
 };
 
+void thread_pool_test();
+
 } // namespace base
 
 #endif

@@ -46,7 +46,7 @@ void ThreadPool::Shutdown() {
 
 ThreadPool::~ThreadPool() { Shutdown(); }
 
-void test() {
+void thread_pool_test() {
 
   using namespace std::chrono_literals;
   auto pool = ThreadPool::MakeShared(10);
