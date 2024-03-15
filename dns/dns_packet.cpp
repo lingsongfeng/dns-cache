@@ -149,11 +149,10 @@ consume_n_u8_to_string(const uint8_t **data, uint32_t *len, uint32_t n) {
 bool consume_dns_name_impl_v2(const uint8_t **data, uint32_t *len,
                               const uint8_t *const packet_begin,
                               const uint32_t packet_len, std::string &s) {
-  // printf("idx:%ld\n", *data - packet_begin);
   std::string ret;
+  constexpr const uint64_t kMaxNameLength = 75;
   while (true) {
-    // TODO(lingsong.feng): use const threshold
-    if (s.size() >= 75) {
+    if (s.size() >= kMaxNameLength) {
       return false;
     }
     uint8_t s_length;
@@ -181,7 +180,6 @@ bool consume_dns_name_impl_v2(const uint8_t **data, uint32_t *len,
         return false;
       }
       uint16_t offset = net_u8_to_u16(s_length, next_u8) & 0b0011111111111111;
-      // printf("%hu\n", offset);
       const uint8_t *start_pos = packet_begin + offset;
       uint32_t packet_len_remains = packet_len - offset;
       if (consume_dns_name_impl_v2(&start_pos, &packet_len_remains,
@@ -203,10 +201,8 @@ std::optional<std::string> consume_dns_name_v2(const uint8_t **data,
   if (consume_dns_name_impl_v2(data, len, packet_begin, packet_len, ret)) {
     if (!ret.empty())
       ret.pop_back();
-    // printf("%s\n", ret.c_str());
     return ret;
   } else {
-    // printf("error: %s\n", ret.c_str());
     return {};
   }
 }
