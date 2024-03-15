@@ -41,21 +41,30 @@ DNSPacket make_query_packet(const DNSCache::Key &key) {
 
   return packet;
 }
-}; // namespace
 
+std::string to_string(const std::vector<uint8_t>& bytes) {
+  std::string s;
+  for (uint8_t byte : bytes) {
+    s.push_back(byte);
+  }
+  return s;
+}
+
+}; // namespace
 
 DNSCache::DNSCache(std::weak_ptr<Gateway> gateway,
                    std::weak_ptr<base::ThreadPool> thread_pool)
     : thread_pool_(thread_pool), gateway_(gateway) {}
 
-
-std::vector<std::pair<DNSCache::Key, dns_record>> DNSCache::query(const Key &key) {
+std::vector<std::pair<DNSCache::Key, dns_record>>
+DNSCache::query(const Key &key) {
   std::lock_guard<std::mutex> lg(mutex_);
 
   std::vector<std::pair<Key, dns_record>> ret;
   bool will_query_upstream = false;
-  
-  auto precise_query = [&](const Key& key) {
+
+  auto precise_query = [&](const Key &key) {
+    bool pushed = false;
     if (auto iter = mp_.find(key); iter != mp_.end()) {
       for (const auto &[data, expire_time] : iter->second) {
         // TODO(lingsong.feng): avoid always getting system time
@@ -65,18 +74,24 @@ std::vector<std::pair<DNSCache::Key, dns_record>> DNSCache::query(const Key &key
         }
         // TODO(lingsong.feng): fill TTL field
         ret.push_back({key, data});
+        pushed = true;
       }
     } else {
       will_query_upstream = true;
     }
+    return pushed;
   };
 
   // TODO(lingsong.feng): recursive lookup
   Key cname_key = key;
-  std::get<1>(cname_key) = 5; // for searching CNAME
-  precise_query(key);
-  precise_query(cname_key);
-
+  std::get<1>(cname_key) = 5; // for searching CNAME record
+  while (precise_query(cname_key)) {
+    auto cname = ret.back().second;
+    std::get<0>(cname_key) = to_string(cname);
+  }
+  Key a_key = key;
+  std::get<1>(a_key) = 1;
+  precise_query(a_key);
 
   if (will_query_upstream) {
     if (auto thread_pool = thread_pool_.lock()) {
@@ -85,11 +100,11 @@ std::vector<std::pair<DNSCache::Key, dns_record>> DNSCache::query(const Key &key
         if (auto gateway = gateway_weak.lock()) {
           gateway->Send(packet);
         } else {
-          fprintf(stderr, "Gateway object released\n");
+          fprintf(stderr, "[ERROR] Gateway object released\n");
         }
       });
     } else {
-      fprintf(stderr, "thread_pool object released\n");
+      fprintf(stderr, "[ERROR] thread_pool object released\n");
     }
   }
 
@@ -99,7 +114,6 @@ std::vector<std::pair<DNSCache::Key, dns_record>> DNSCache::query(const Key &key
 void DNSCache::update(const std::vector<dns_answer> &answers) {
   std::lock_guard<std::mutex> lg(mutex_);
 
-  printf("cache size: %lu\n", mp_.size());
   for (const auto &ans : answers) {
     std::string name = ans.name;
     auto expire_at =

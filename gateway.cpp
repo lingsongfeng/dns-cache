@@ -57,7 +57,7 @@ void Gateway::ProcessRawPacket(std::vector<uint8_t> buffer,
         ans.rdata = record;
         packet.answers.push_back(std::move(ans));
       }
-      packet.header.flag.from_host(kStandardQuery);
+      packet.header.flag.from_host(kStandardResponse);
 
       auto buffer = GenerateDNSRawPacket(packet);
       udp_socket_.SendTo(buffer, addr);

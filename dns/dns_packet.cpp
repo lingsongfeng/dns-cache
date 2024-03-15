@@ -471,7 +471,7 @@ void append_u16_to_net(std::vector<uint8_t> &v, uint16_t val) {
 }
 
 void append_u32_to_net(std::vector<uint8_t> &v, uint32_t val) {
-  uint16_t net_val = htonl(val);
+  uint32_t net_val = htonl(val);
   v.push_back(0);
   v.push_back(0);
   v.push_back(0);
