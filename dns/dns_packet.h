@@ -1,7 +1,9 @@
 #ifndef DNS_DNS_PACKET_H_
 #define DNS_DNS_PACKET_H_
 
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 // TODO(lingsong.feng): bit order check
@@ -22,17 +24,13 @@ struct dns_flag {
 static_assert(sizeof(dns_flag) == 2, "error size of dns_flag");
 
 struct dns_header {
-  uint16_t id;      // 2bytes
-  dns_flag flag;    // 2bytes
+  uint16_t id;   // 2bytes
+  dns_flag flag; // 2bytes
 
-  // TODO(lingsong.feng): deprecate in the future
-  uint16_t qdcount; // 2bytes
-  // TODO(lingsong.feng): deprecate in the future
-  uint16_t ancount; // 2bytes
-  // TODO(lingsong.feng): deprecate in the future
-  uint16_t nscount; // 2bytes
-  // TODO(lingsong.feng): deprecate in the future
-  uint16_t arcount; // 2bytes
+  [[deprecated("use questions.size()")]] uint16_t qdcount;          // 2bytes
+  [[deprecated("use answers.size()")]] uint16_t ancount;            // 2bytes
+  [[deprecated("will be removed in the future")]] uint16_t nscount; // 2bytes
+  [[deprecated("will be removed in the future")]] uint16_t arcount; // 2bytes
 };
 
 struct dns_question {
@@ -46,8 +44,16 @@ struct dns_answer {
   uint16_t type;
   uint16_t ans_class;
   uint32_t ttl;
-  uint16_t rdlength; // TODO(lingsong.feng): deprecate in the future
+  [[deprecated(
+      "rdlength will be removed in the future, use get_rdlength()")]] uint16_t
+      rdlength;
   std::vector<uint8_t> rdata;
+  inline uint16_t get_rdlength() const {
+    if (rdata.size() > std::numeric_limits<uint16_t>::max()) {
+      return std::numeric_limits<uint16_t>::max();
+    }
+    return static_cast<uint16_t>(rdata.size());
+  }
 };
 
 class DNSPacket {
@@ -61,7 +67,7 @@ std::optional<DNSPacket> ParseDNSRawPacket(const uint8_t *data, uint32_t len);
 
 std::vector<uint8_t> GenerateDNSRawPacket(const DNSPacket &packet);
 
-void PrintDNSPacket(const DNSPacket& packet);
+void PrintDNSPacket(const DNSPacket &packet);
 
 void TestParsePacket();
 

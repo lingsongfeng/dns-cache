@@ -44,7 +44,8 @@ void Gateway::ProcessRawPacket(std::vector<uint8_t> buffer,
                       packet.questions[0].qclass};
 
     auto records = dns_cache_->query(key);
-    if (!records.empty()) {
+
+    auto do_when_records_not_empty = [&]() {
       fprintf(stderr, "cache HIT\n");
       for (auto &[key, record] : records) {
         dns_answer ans;
@@ -62,11 +63,16 @@ void Gateway::ProcessRawPacket(std::vector<uint8_t> buffer,
 
       auto buffer = GenerateDNSRawPacket(packet);
       udp_socket_.SendTo(buffer, addr);
+    };
+
+    if (!records.empty()) {
+      do_when_records_not_empty();
       return;
     } else {
       fprintf(stderr, "cache missed\n");
-      //Send(packet);
     }
+
+    // TODO(lingsong.feng): exponential backoff
 
   } else {
     // response

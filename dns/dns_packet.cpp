@@ -83,8 +83,10 @@ consume_n_u8_to_string(const uint8_t **data, uint32_t *len, uint32_t n) {
   return ret;
 }
 
-std::optional<std::string> consume_dns_name_impl(const uint8_t **data,
-                                                 uint32_t *len) {
+[[deprecated(
+    "multiple jumps are not supported, use consume_dns_name_v2")]] std::
+    optional<std::string>
+    consume_dns_name_impl(const uint8_t **data, uint32_t *len) {
   uint8_t s_length;
   if (auto s_length_opt = consume_one_u8(data, len)) {
     s_length = *s_length_opt;
@@ -113,10 +115,11 @@ std::optional<std::string> consume_dns_name_impl(const uint8_t **data,
   return name;
 }
 
-// TODO(lingsong.feng): support multiple jumps
-std::optional<std::string> consume_dns_name(const uint8_t **data, uint32_t *len,
-                                            const uint8_t *packet_begin,
-                                            uint32_t packet_len) {
+[[deprecated(
+    "multiple jumps are not supported, use consume_dns_name_v2")]] std::
+    optional<std::string>
+    consume_dns_name(const uint8_t **data, uint32_t *len,
+                     const uint8_t *packet_begin, uint32_t packet_len) {
   uint8_t s_length;
   if (auto s_length_opt = consume_one_u8(data, len)) {
     s_length = *s_length_opt;
@@ -146,7 +149,7 @@ std::optional<std::string> consume_dns_name(const uint8_t **data, uint32_t *len,
 bool consume_dns_name_impl_v2(const uint8_t **data, uint32_t *len,
                               const uint8_t *const packet_begin,
                               const uint32_t packet_len, std::string &s) {
-  //printf("idx:%ld\n", *data - packet_begin);
+  // printf("idx:%ld\n", *data - packet_begin);
   std::string ret;
   while (true) {
     // TODO(lingsong.feng): use const threshold
@@ -178,7 +181,7 @@ bool consume_dns_name_impl_v2(const uint8_t **data, uint32_t *len,
         return false;
       }
       uint16_t offset = net_u8_to_u16(s_length, next_u8) & 0b0011111111111111;
-      //printf("%hu\n", offset);
+      // printf("%hu\n", offset);
       const uint8_t *start_pos = packet_begin + offset;
       uint32_t packet_len_remains = packet_len - offset;
       if (consume_dns_name_impl_v2(&start_pos, &packet_len_remains,
@@ -200,10 +203,10 @@ std::optional<std::string> consume_dns_name_v2(const uint8_t **data,
   if (consume_dns_name_impl_v2(data, len, packet_begin, packet_len, ret)) {
     if (!ret.empty())
       ret.pop_back();
-    //printf("%s\n", ret.c_str());
+    // printf("%s\n", ret.c_str());
     return ret;
   } else {
-    //printf("error: %s\n", ret.c_str());
+    // printf("error: %s\n", ret.c_str());
     return {};
   }
 }
@@ -573,7 +576,8 @@ void PrintDNSPacket(const DNSPacket &packet) {
   }
   printf("answers:\n");
   for (const dns_answer &ans : packet.answers) {
-    printf("    %s type:%hu class:%hu ", ans.name.c_str(), ans.type, ans.ans_class);
+    printf("    %s type:%hu class:%hu ", ans.name.c_str(), ans.type,
+           ans.ans_class);
     printf("ttl:%u rdlength:%hu data:[", ans.ttl, ans.rdlength);
     for (uint8_t byte : ans.rdata) {
       printf("%02hhx ", byte);

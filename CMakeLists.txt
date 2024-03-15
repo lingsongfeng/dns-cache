@@ -9,8 +9,8 @@ set (CMAKE_CXX_STANDARD 20)
 set(CMAKE_BUILD_TYPE "Debug")
 add_compile_options(-fsanitize=address)
 add_link_options(-fsanitize=address)
-add_compile_options(-Wthread-safety)
-add_link_options(-Wthread-safety)
+add_compile_options(-Wall)
+add_link_options(-Wall)
 
 
 add_executable(dns_cache main.cpp dns_cache.cpp gateway.cpp)
