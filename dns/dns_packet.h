@@ -6,7 +6,6 @@
 #include <limits>
 #include <string>
 
-// TODO(lingsong.feng): bit order check
 struct dns_flag {
   // second byte
   uint8_t rcode : 4, // response code, 4bit
@@ -21,7 +20,13 @@ struct dns_flag {
   void from_host(uint32_t flag) { *reinterpret_cast<uint16_t *>(this) = flag; }
   uint32_t to_host() const { return *reinterpret_cast<const uint16_t *>(this); }
 };
+
+// TODO(lingsong.feng): bit order check
+constexpr bool check_dns_flag_bit_order() { return true; }
+
 static_assert(sizeof(dns_flag) == 2, "error size of dns_flag");
+static_assert(check_dns_flag_bit_order(),
+              "bit order error of dns_flag, please che the endianness");
 
 struct dns_header {
   uint16_t id;   // 2bytes

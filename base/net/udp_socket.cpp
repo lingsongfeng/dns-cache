@@ -101,7 +101,6 @@ Result<std::uint64_t> UDPSocket::SendTo(std::span<uint8_t> buffer, const SocketA
   dst_addr.sin_port = htons(v4_addr.port);
   auto addr_s = to_string(v4_addr.ip);
   dst_addr.sin_addr.s_addr = inet_addr(addr_s.c_str());
-  printf("send addr=%s port=%hu\n", addr_s.c_str(), v4_addr.port);
 
   uint64_t rv = sendto(socket_fd_, &buffer[0], buffer.size(), 0, (const struct sockaddr*)&dst_addr, addr_len);
 

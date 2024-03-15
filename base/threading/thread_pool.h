@@ -24,12 +24,14 @@ public:
     auto func3 =
         [func1 = std::move(func1), func2 = std::move(func2),
          pool =
-             shared_from_this()]() { // TODO(lingsong.feng): use weak or shared?
+             weak_from_this()]() { // TODO(lingsong.feng): use weak or shared?
           T rv = func1();
           auto func2_wrapped = [t = std::move(rv), func2 = std::move(func2)]() {
             func2(std::move(t));
           };
-          pool->PostTask(func2_wrapped);
+          if (auto pool_sp = pool.lock()) {
+            pool_sp->PostTask(func2_wrapped);
+          }
         };
     PostTask(func3);
   }
