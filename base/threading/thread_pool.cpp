@@ -18,7 +18,6 @@ ThreadPool::ThreadPool(int number_of_threads) {
   }
 }
 
-// TODO(lingsong.feng): make method thread-safe
 void ThreadPool::PostTask(std::function<void()> &&func) {
   std::lock_guard<std::mutex> lg(mutex_);
 
@@ -26,7 +25,6 @@ void ThreadPool::PostTask(std::function<void()> &&func) {
   round_robin_counter = (round_robin_counter + 1) % handlers_.size();
 }
 
-// TODO(lingsong.feng): make method thread-safe
 int ThreadPool::GetNumberOfThreads() {
   int rv = -1;
   {
@@ -36,7 +34,6 @@ int ThreadPool::GetNumberOfThreads() {
   return rv;
 }
 
-// TODO(lingsong.feng): make method thread-safe
 void ThreadPool::Shutdown() {
   std::lock_guard<std::mutex> lg(mutex_);
   for (auto &handler : handlers_) {
