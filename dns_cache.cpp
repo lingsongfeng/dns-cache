@@ -46,7 +46,7 @@ DNSPacket make_query_packet(const DNSCache::Key &key) {
 
 DNSCache::DNSCache(std::weak_ptr<Gateway> gateway,
                    std::weak_ptr<base::ThreadPool> thread_pool)
-    : gateway_(gateway), thread_pool_(thread_pool) {}
+    : thread_pool_(thread_pool), gateway_(gateway) {}
 
 
 std::vector<std::pair<DNSCache::Key, dns_record>> DNSCache::query(const Key &key) {

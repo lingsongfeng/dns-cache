@@ -104,10 +104,8 @@ Result<std::uint64_t> UDPSocket::SendTo(std::span<uint8_t> buffer, const SocketA
   printf("send addr=%s port=%hu\n", addr_s.c_str(), v4_addr.port);
 
   uint64_t rv = sendto(socket_fd_, &buffer[0], buffer.size(), 0, (const struct sockaddr*)&dst_addr, addr_len);
-  // printf("rv=%llu\n", rv);
 
-  // TODO: return value
-  return Result<std::uint64_t>::Ok(0);
+  return Result<std::uint64_t>::Ok(rv);
 }
 
 } // namespace base
