@@ -291,7 +291,6 @@ std::optional<dns_answer> ParseDNSRawAnswer(const uint8_t **data, uint32_t *len,
   ans.type = type;
   ans.ans_class = ans_class;
   ans.ttl = ttl;
-  ans.rdlength = rdlength;
   ans.rdata = std::move(rdata);
   return ans;
 }
@@ -407,28 +406,28 @@ std::optional<DNSPacket> ParseDNSRawPacket(const uint8_t *data, uint32_t len) {
 
   uint16_t qdcount;
   if (auto qdcount_opt = consume_two_u8(&data, &len)) {
-    packet.header.qdcount = qdcount = *qdcount_opt;
+    qdcount = *qdcount_opt;
   } else {
     return {};
   }
 
   uint16_t ancount;
   if (auto ancount_opt = consume_two_u8(&data, &len)) {
-    packet.header.ancount = ancount = *ancount_opt;
+    ancount = *ancount_opt;
   } else {
     return {};
   }
 
   uint16_t nscount;
   if (auto nscount_opt = consume_two_u8(&data, &len)) {
-    packet.header.nscount = nscount = *nscount_opt;
+    nscount = *nscount_opt;
   } else {
     return {};
   }
 
   uint16_t arcount;
   if (auto arcount_opt = consume_two_u8(&data, &len)) {
-    packet.header.arcount = arcount = *arcount_opt;
+    arcount = *arcount_opt;
   } else {
     return {};
   }
@@ -449,6 +448,14 @@ std::optional<DNSPacket> ParseDNSRawPacket(const uint8_t *data, uint32_t len) {
     } else {
       return {};
     }
+  }
+
+  // TODO(lingsong.feng): parse data
+  for (int i = 0; i < nscount; i++) {
+    packet.authority_records.emplace_back();
+  }
+  for (int i = 0; i < arcount; i++) {
+    packet.additional_records.emplace_back();
   }
 
   return packet;
@@ -508,10 +515,10 @@ std::vector<uint8_t> GenerateDNSRawPacket(const DNSPacket &packet) {
   std::vector<uint8_t> ret;
   append_u16_to_net(ret, packet.header.id);
   append_u16_to_net(ret, packet.header.flag.to_host());
-  append_u16_to_net(ret, packet.header.qdcount);
-  append_u16_to_net(ret, packet.header.ancount);
-  append_u16_to_net(ret, packet.header.nscount);
-  append_u16_to_net(ret, packet.header.arcount);
+  append_u16_to_net(ret, packet.get_qdcount());
+  append_u16_to_net(ret, packet.get_ancount());
+  append_u16_to_net(ret, packet.get_nscount());
+  append_u16_to_net(ret, packet.get_arcount());
 
   for (const dns_question &q : packet.questions) {
     append_dns_name(ret, q.qname);
@@ -524,7 +531,7 @@ std::vector<uint8_t> GenerateDNSRawPacket(const DNSPacket &packet) {
     append_u16_to_net(ret, ans.type);
     append_u16_to_net(ret, ans.ans_class);
     append_u32_to_net(ret, ans.ttl);
-    append_u16_to_net(ret, ans.rdlength);
+    append_u16_to_net(ret, ans.get_rdlength());
     append_bytes(ret, std::span(ans.rdata.begin(), ans.rdata.size()));
   }
 
@@ -564,8 +571,8 @@ void PrintDNSPacket(const DNSPacket &packet) {
          packet.header.flag.aa, packet.header.flag.tc, packet.header.flag.rd,
          packet.header.flag.ra, packet.header.flag.z, packet.header.flag.rcode);
   printf("qdcount:%hu ancount:%hu nscount:%hu arcount:%hu\n",
-         packet.header.qdcount, packet.header.ancount, packet.header.nscount,
-         packet.header.arcount);
+         packet.get_qdcount(), packet.get_ancount(), packet.get_nscount(),
+         packet.get_arcount());
   printf("questions:\n");
   for (const dns_question &q : packet.questions) {
     printf("    %s type:%hu class:%hu\n", q.qname.c_str(), q.qtype, q.qclass);
@@ -574,7 +581,7 @@ void PrintDNSPacket(const DNSPacket &packet) {
   for (const dns_answer &ans : packet.answers) {
     printf("    %s type:%hu class:%hu ", ans.name.c_str(), ans.type,
            ans.ans_class);
-    printf("ttl:%u rdlength:%hu data:[", ans.ttl, ans.rdlength);
+    printf("ttl:%u rdlength:%hu data:[", ans.ttl, ans.get_rdlength());
     for (uint8_t byte : ans.rdata) {
       printf("%02hhx ", byte);
     }

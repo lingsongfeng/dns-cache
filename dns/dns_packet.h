@@ -26,11 +26,6 @@ static_assert(sizeof(dns_flag) == 2, "error size of dns_flag");
 struct dns_header {
   uint16_t id;   // 2bytes
   dns_flag flag; // 2bytes
-
-  [[deprecated("use questions.size()")]] uint16_t qdcount;          // 2bytes
-  [[deprecated("use answers.size()")]] uint16_t ancount;            // 2bytes
-  [[deprecated("will be removed in the future")]] uint16_t nscount; // 2bytes
-  [[deprecated("will be removed in the future")]] uint16_t arcount; // 2bytes
 };
 
 struct dns_question {
@@ -44,23 +39,24 @@ struct dns_answer {
   uint16_t type;
   uint16_t ans_class;
   uint32_t ttl;
-  [[deprecated(
-      "rdlength will be removed in the future, use get_rdlength()")]] uint16_t
-      rdlength;
   std::vector<uint8_t> rdata;
-  inline uint16_t get_rdlength() const {
-    if (rdata.size() > std::numeric_limits<uint16_t>::max()) {
-      return std::numeric_limits<uint16_t>::max();
-    }
-    return static_cast<uint16_t>(rdata.size());
-  }
+  inline uint16_t get_rdlength() const { return rdata.size(); }
 };
+
+struct dns_authority_record {};
+struct dns_additional_record {};
 
 class DNSPacket {
 public:
   dns_header header;
   std::vector<dns_question> questions;
   std::vector<dns_answer> answers;
+  std::vector<dns_authority_record> authority_records;
+  std::vector<dns_additional_record> additional_records;
+  uint16_t get_qdcount() const { return questions.size(); }
+  uint16_t get_ancount() const { return answers.size(); }
+  uint16_t get_nscount() const { return authority_records.size(); }
+  uint16_t get_arcount() const { return additional_records.size(); }
 };
 
 std::optional<DNSPacket> ParseDNSRawPacket(const uint8_t *data, uint32_t len);

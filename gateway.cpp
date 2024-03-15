@@ -54,10 +54,8 @@ void Gateway::ProcessRawPacket(std::vector<uint8_t> buffer,
         ans.ans_class = std::get<2>(key);
         ans.ttl = 100; // TODO(lingsong.feng): use actual TTL
         ans.rdata = record;
-        ans.rdlength = record.size();
         packet.answers.push_back(std::move(ans));
       }
-      packet.header.ancount = packet.answers.size();
       packet.header.flag.from_host(
           0x8180); // TODO(lingsong.feng): standard_query_response
 

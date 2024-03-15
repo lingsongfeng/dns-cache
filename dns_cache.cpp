@@ -31,10 +31,6 @@ DNSPacket make_query_packet(const DNSCache::Key &key) {
   DNSPacket packet;
   packet.header.id = rand() % 0x10000;
   packet.header.flag.from_host(0x0100); // standard query
-  packet.header.qdcount = 1;
-  packet.header.ancount = 0;
-  packet.header.arcount = 0;
-  packet.header.nscount = 0;
 
   // TODO(lingsong.feng): combine DNSCache::Key and dns_question
   dns_question question;
