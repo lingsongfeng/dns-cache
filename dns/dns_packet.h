@@ -6,6 +6,9 @@
 #include <limits>
 #include <string>
 
+constexpr const uint16_t kStandardQuery = 0x0100;
+constexpr const uint16_t kStandardResponse = 0x8180;
+
 struct dns_flag {
   // second byte
   uint8_t rcode : 4, // response code, 4bit

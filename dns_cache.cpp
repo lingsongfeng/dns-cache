@@ -30,7 +30,7 @@ is_expired(const std::chrono::time_point<std::chrono::system_clock> &t) {
 DNSPacket make_query_packet(const DNSCache::Key &key) {
   DNSPacket packet;
   packet.header.id = rand() % 0x10000;
-  packet.header.flag.from_host(0x0100); // standard query
+  packet.header.flag.from_host(kStandardQuery); // standard query
 
   // TODO(lingsong.feng): combine DNSCache::Key and dns_question
   dns_question question;

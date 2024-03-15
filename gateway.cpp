@@ -32,13 +32,14 @@ void Gateway::ProcessRawPacket(std::vector<uint8_t> buffer,
   if (auto packet_opt = ParseDNSRawPacket(&buffer[0], buffer.size())) {
     packet = std::move(*packet_opt);
   } else {
-    fprintf(stderr, "parse packet failed\n");
+    fprintf(stderr, "[ERROR] parse packet failed\n");
     return;
   }
   PrintDNSPacket(packet);
   if (packet.header.flag.qr == 0) {
     if (packet.questions.empty()) {
-      fprintf(stderr, "empty question\n");
+      fprintf(stderr, "[WARN] empty question\n");
+      return;
     }
     DNSCache::Key key{packet.questions[0].qname, packet.questions[0].qtype,
                       packet.questions[0].qclass};
@@ -46,7 +47,7 @@ void Gateway::ProcessRawPacket(std::vector<uint8_t> buffer,
     auto records = dns_cache_->query(key);
 
     auto do_when_records_not_empty = [&]() {
-      fprintf(stderr, "cache HIT\n");
+      fprintf(stderr, "[INFO] cache hit\n");
       for (auto &[key, record] : records) {
         dns_answer ans;
         ans.name = std::get<0>(key);
@@ -56,8 +57,7 @@ void Gateway::ProcessRawPacket(std::vector<uint8_t> buffer,
         ans.rdata = record;
         packet.answers.push_back(std::move(ans));
       }
-      packet.header.flag.from_host(
-          0x8180); // TODO(lingsong.feng): standard_query_response
+      packet.header.flag.from_host(kStandardQuery);
 
       auto buffer = GenerateDNSRawPacket(packet);
       udp_socket_.SendTo(buffer, addr);
@@ -86,7 +86,8 @@ void Gateway::Run() {
     if (auto opt =
             udp_socket_.RecvFrom(std::span(buffer.begin(), buffer.size()))) {
       auto [cnt, addr] = *opt;
-      printf("recv %llu byte(s) from %s\n", cnt, base::to_string(addr).c_str());
+      printf("[INFO] recv %llu byte(s) from %s\n", cnt,
+             base::to_string(addr).c_str());
       buffer.resize(cnt);
 
       thread_pool_->PostTask([this, buffer = std::move(buffer), addr]() {
@@ -94,7 +95,7 @@ void Gateway::Run() {
       });
 
     } else {
-      fprintf(stderr, "udp socket recvfrom failed\n");
+      fprintf(stderr, "[WARN] udp socket recvfrom failed\n");
     }
   }
 }
