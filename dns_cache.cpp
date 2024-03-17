@@ -27,106 +27,77 @@ is_expired(const std::chrono::time_point<std::chrono::system_clock> &t) {
   return t < std::chrono::system_clock::now();
 }
 
-DNSPacket make_query_packet(const DNSCache::Key &key) {
-  DNSPacket packet;
-  packet.header.id = rand() % 0x10000;
-  packet.header.flag.from_host(kStandardQuery); // standard query
-
-  // TODO(lingsong.feng): combine DNSCache::Key and dns_question
-  dns_question question;
-  question.qname = std::get<0>(key);
-  question.qtype = std::get<1>(key);
-  question.qclass = std::get<2>(key);
-  packet.questions.push_back(std::move(question));
-
-  return packet;
-}
-
-std::string to_string(const std::vector<uint8_t>& bytes) {
-  std::string s;
-  for (uint8_t byte : bytes) {
-    s.push_back(byte);
-  }
-  return s;
-}
-
 }; // namespace
 
 DNSCache::DNSCache(std::weak_ptr<Gateway> gateway,
                    std::weak_ptr<base::ThreadPool> thread_pool)
     : thread_pool_(thread_pool), gateway_(gateway) {}
 
-std::vector<std::pair<DNSCache::Key, dns_record>>
+std::optional<std::pair<int, std::vector<uint8_t>>>
 DNSCache::query(const Key &key) {
   std::lock_guard<std::mutex> lg(mutex_);
 
-  std::vector<std::pair<Key, dns_record>> ret;
-  bool will_query_upstream = false;
-
-  auto precise_query = [&](const Key &key) {
-    bool pushed = false;
-    if (auto iter = mp_.find(key); iter != mp_.end()) {
-      for (const auto &[data, expire_time] : iter->second) {
-        // TODO(lingsong.feng): avoid always getting system time
-        if (is_expired(expire_time)) {
-          will_query_upstream = true;
-          continue;
-        }
-        // TODO(lingsong.feng): fill TTL field
-        ret.push_back({key, data});
-        pushed = true;
-      }
+  if (auto iter = mp_.find(key);
+      iter != mp_.end() && std::get<3>(iter->second).empty()) {
+    auto expire_time = std::get<2>(iter->second);
+    if (!is_expired(expire_time)) {
+      return {{std::get<0>(iter->second), std::get<1>(iter->second)}};
     } else {
-      will_query_upstream = true;
-    }
-    return pushed;
-  };
-
-  // TODO(lingsong.feng): recursive lookup
-  Key cname_key = key;
-  std::get<1>(cname_key) = 5; // for searching CNAME record
-  while (precise_query(cname_key)) {
-    auto cname = ret.back().second;
-    std::get<0>(cname_key) = to_string(cname);
-  }
-  Key a_key = key;
-  std::get<1>(a_key) = 1;
-  precise_query(a_key);
-
-  if (will_query_upstream) {
-    if (auto thread_pool = thread_pool_.lock()) {
-      thread_pool->PostTask([key, gateway_weak = gateway_]() {
-        auto packet = make_query_packet(key);
-        if (auto gateway = gateway_weak.lock()) {
-          gateway->Send(packet);
-        } else {
-          fprintf(stderr, "[ERROR] Gateway object released\n");
-        }
-      });
-    } else {
-      fprintf(stderr, "[ERROR] thread_pool object released\n");
+      fprintf(stderr, "[INFO] record expired\n");
     }
   }
 
-  return ret;
+  return {};
 }
 
-void DNSCache::update(const std::vector<dns_answer> &answers) {
+std::optional<std::pair<int, std::vector<uint8_t>>>
+DNSCache::query_or_register_callback(const Key &key,
+                                     std::function<void()> &&cb) {
   std::lock_guard<std::mutex> lg(mutex_);
 
-  for (const auto &ans : answers) {
-    std::string name = ans.name;
-    auto expire_at =
-        std::chrono::system_clock::now() + std::chrono::seconds(ans.ttl);
-    auto data = ans.rdata;
-    auto key = std::make_tuple(ans.name, ans.type, ans.ans_class);
-    if (auto iter = mp_.find(key); iter != mp_.end()) {
-      // replace with newest record
-      iter->second.insert_or_assign(data, expire_at);
+  if (auto iter = mp_.find(key);
+      iter != mp_.end() && std::get<3>(iter->second).empty()) {
+    auto expire_time = std::get<2>(iter->second);
+    if (!is_expired(expire_time)) {
+      return {{std::get<0>(iter->second), std::get<1>(iter->second)}};
     } else {
-      Value inner_mp = {{data, expire_at}};
-      // TODO(lingsong.feng): consider std::move(key)
-      mp_.insert({key, std::move(inner_mp)});
+      std::get<3>(iter->second).push_back(std::move(cb));
+      fprintf(stderr, "[INFO] record expired\n");
     }
+  } else {
+    Value value;
+    std::get<3>(value).push_back(std::move(cb));
+    mp_.insert({key, std::move(value)});
+  }
+
+  return {};
+}
+
+void DNSCache::update(const DNSPacket &packet) {
+  std::lock_guard<std::mutex> lg(mutex_);
+
+  if (packet.raw_answers.empty()) {
+    return;
+  }
+
+  Key key = packet.raw_questions;
+  uint32_t min_ttl = 1e7;
+  for (const dns_answer &ans : packet.answers) {
+    min_ttl = std::min(min_ttl, ans.ttl);
+  }
+  auto expire_at =
+      std::chrono::system_clock::now() + std::chrono::seconds(min_ttl);
+  Value value = {packet.get_ancount(), packet.raw_answers, expire_at, {}};
+
+  if (auto iter = mp_.find(key); iter != mp_.end()) {
+    auto cbs = std::move(std::get<3>(iter->second));
+    iter->second = value;
+    if (auto thread_pool = thread_pool_.lock()) {
+      for (auto &&cb : cbs) {
+        thread_pool->PostTask(std::move(cb));
+      }
+    }
+  } else {
+    mp_.insert({key, value});
   }
 }

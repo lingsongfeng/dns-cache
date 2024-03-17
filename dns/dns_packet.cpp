@@ -432,6 +432,7 @@ std::optional<DNSPacket> ParseDNSRawPacket(const uint8_t *data, uint32_t len) {
     return {};
   }
 
+  const uint8_t *start_pos = data;
   for (int i = 0; i < qdcount; i++) {
     if (auto opt_question =
             ParseDNSRawQuestion(&data, &len, packet_begin, packet_len)) {
@@ -440,7 +441,12 @@ std::optional<DNSPacket> ParseDNSRawPacket(const uint8_t *data, uint32_t len) {
       return {};
     }
   }
+  const uint8_t *end_pos = data;
+  for (const uint8_t *pos = start_pos; pos < end_pos; pos++) {
+    packet.raw_questions.push_back(*pos);
+  }
 
+  start_pos = data;
   for (int i = 0; i < ancount; i++) {
     if (auto opt_answer =
             ParseDNSRawAnswer(&data, &len, packet_begin, packet_len)) {
@@ -448,6 +454,10 @@ std::optional<DNSPacket> ParseDNSRawPacket(const uint8_t *data, uint32_t len) {
     } else {
       return {};
     }
+  }
+  end_pos = data;
+  for (const uint8_t *pos = start_pos; pos < end_pos; pos++) {
+    packet.raw_answers.push_back(*pos);
   }
 
   // TODO(lingsong.feng): parse data
@@ -589,4 +599,23 @@ void PrintDNSPacket(const DNSPacket &packet) {
   }
 
   printf("\n");
+}
+
+std::vector<uint8_t> generate_dns_raw_from_raw_parts(
+    const dns_header &header, const std::vector<uint8_t> &questions,
+    const std::vector<uint8_t> &answers, int qdcount, int ancount) {
+  std::vector<uint8_t> ret;
+  append_u16_to_net(ret, header.id);
+  append_u16_to_net(ret, header.flag.to_host());
+  append_u16_to_net(ret, qdcount);
+  append_u16_to_net(ret, ancount);
+  append_u16_to_net(ret, 0);
+  append_u16_to_net(ret, 0);
+  for (uint8_t byte : questions) {
+    ret.push_back(byte);
+  }
+  for (uint8_t byte : answers) {
+    ret.push_back(byte);
+  }
+  return ret;
 }

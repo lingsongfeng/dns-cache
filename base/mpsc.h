@@ -60,9 +60,8 @@ public:
   SenderHandler &operator=(const SenderHandler &) = default;
 
   template <typename U> void send(U &&u) {
-    if constexpr (std::is_convertible_v<U, T>) {
-      receiver_->push(std::forward<U>(u));
-    }
+    static_assert(std::is_convertible_v<U, T>, "");
+    receiver_->push(std::forward<U>(u));
   }
 
   SenderHandler() = delete;
@@ -129,12 +128,11 @@ public:
   }
 
   template <typename U> void push(U &&u) {
-    if constexpr (std::is_convertible_v<U, T>) {
-      mutex_.lock();
-      queue_.push(std::forward<U>(u));
-      mutex_.unlock();
-      condvar_.notify_one();
-    }
+    static_assert(std::is_convertible_v<U, T>, "");
+    mutex_.lock();
+    queue_.push(std::forward<U>(u));
+    mutex_.unlock();
+    condvar_.notify_one();
   }
 
   Receiver(const Receiver &) = delete;

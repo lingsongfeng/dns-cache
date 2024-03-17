@@ -61,6 +61,8 @@ public:
   std::vector<dns_answer> answers;
   std::vector<dns_authority_record> authority_records;
   std::vector<dns_additional_record> additional_records;
+  std::vector<uint8_t> raw_questions;
+  std::vector<uint8_t> raw_answers;
   uint16_t get_qdcount() const { return questions.size(); }
   uint16_t get_ancount() const { return answers.size(); }
   uint16_t get_nscount() const { return authority_records.size(); }
@@ -69,7 +71,10 @@ public:
 
 std::optional<DNSPacket> ParseDNSRawPacket(const uint8_t *data, uint32_t len);
 
+[[deprecated("use from raw parts")]]
 std::vector<uint8_t> GenerateDNSRawPacket(const DNSPacket &packet);
+
+std::vector<uint8_t> generate_dns_raw_from_raw_parts(const dns_header& header, const std::vector<uint8_t>& questions, const std::vector<uint8_t>& answers, int qdcount, int ancount);
 
 void PrintDNSPacket(const DNSPacket &packet);
 

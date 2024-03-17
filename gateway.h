@@ -23,12 +23,16 @@
 class Gateway : public std::enable_shared_from_this<Gateway> {
 public:
   Gateway();
-  void ConstructDNSCache();
-  void Send(const DNSPacket &dns_packet);
+  void Initialize();
+
+  [[deprecated("deprecated")]] void Send(const DNSPacket &dns_packet);
+
   void ProcessRawPacket(std::vector<uint8_t> buffer, base::SocketAddr addr);
+
   void Run();
 
 private:
+  bool initialized_ = false;
   base::UDPSocket udp_socket_;
   std::shared_ptr<base::ThreadPool> thread_pool_;
   std::shared_ptr<DNSCache> dns_cache_;

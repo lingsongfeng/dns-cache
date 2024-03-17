@@ -18,7 +18,7 @@
 
 int main() {
   auto gateway = std::make_shared<Gateway>();
-  gateway->ConstructDNSCache();
+  gateway->Initialize();
   gateway->Run();
   // TestParsePacket();
   return 0;

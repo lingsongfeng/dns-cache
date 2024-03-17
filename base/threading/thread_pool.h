@@ -19,8 +19,8 @@ public:
   void PostTask(std::function<void()> &&func);
 
   template <typename T>
-  void PostSequencedTask(std::function<T()> func1,
-                         std::function<void(T t)> func2) {
+  void PostSequencedTask(std::function<T()> &&func1,
+                         std::function<void(T t)> &&func2) {
     auto func3 =
         [func1 = std::move(func1), func2 = std::move(func2),
          pool =

@@ -3,30 +3,39 @@
 
 #include "base/threading/thread_pool.h"
 #include "dns/dns_packet.h"
+#include <chrono>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
-#include <vector>
+#include <optional>
 #include <string>
-#include <chrono>
+#include <vector>
 
 class Gateway;
 
-using dns_record = std::vector<uint8_t>;
-
 class DNSCache : public std::enable_shared_from_this<DNSCache> {
 public:
-  DNSCache(std::weak_ptr<Gateway> gateway, std::weak_ptr<base::ThreadPool> thread_pool);
-  // <name, type, class>
-  using Key = std::tuple<std::string, uint16_t, uint16_t>;
+  DNSCache(std::weak_ptr<Gateway> gateway,
+           std::weak_ptr<base::ThreadPool> thread_pool);
 
-  // <record, expire_time>
-  using Value =
-      std::map<dns_record, std::chrono::time_point<std::chrono::system_clock>>;
+  // raw dns questions(bytes)
+  using Key = std::vector<uint8_t>;
 
-  std::vector<std::pair<Key, dns_record>> query(const Key &key);
+  // <ancount, raw dns answers(bytes), expire_time, callbacks>
+  using Value = std::tuple<int, std::vector<uint8_t>,
+                           std::chrono::time_point<std::chrono::system_clock>,
+                           std::vector<std::function<void()>>>;
 
-  void update(const std::vector<dns_answer> &answers);
+  // <ancount, raw dns answers(bytes)>
+  std::optional<std::pair<int, std::vector<uint8_t>>> query(const Key &key);
+
+  // <ancount, raw dns answers(bytes)>
+  std::optional<std::pair<int, std::vector<uint8_t>>>
+  query_or_register_callback(
+      const Key &key, std::function<void()> &&cb = []() {});
+
+  void update(const DNSPacket &packet);
 
 private:
   std::map<Key, Value> mp_;

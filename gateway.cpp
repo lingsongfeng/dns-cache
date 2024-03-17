@@ -14,12 +14,16 @@ Gateway::Gateway()
           base::UDPSocket::Bind(base::SocketAddr("0.0.0.0:53")).unwrap()),
       thread_pool_(base::ThreadPool::MakeShared(10)) {}
 
-void Gateway::ConstructDNSCache() {
+void Gateway::Initialize() {
+  initialized_ = true;
   dns_cache_ = dns_cache_ =
       std::make_shared<DNSCache>(weak_from_this(), thread_pool_);
 }
 
 void Gateway::Send(const DNSPacket &dns_packet) {
+  if (!initialized_) {
+    fprintf(stderr, "[ERROR] gateway not initialized\n");
+  }
   auto raw_packet = GenerateDNSRawPacket(dns_packet);
   udp_socket_.SendTo(std::span(raw_packet.begin(), raw_packet.size()),
                      base::SocketAddr("114.114.114.114:53"));
@@ -27,6 +31,9 @@ void Gateway::Send(const DNSPacket &dns_packet) {
 
 void Gateway::ProcessRawPacket(std::vector<uint8_t> buffer,
                                base::SocketAddr addr) {
+  if (!initialized_) {
+    fprintf(stderr, "[ERROR] gateway not initialized\n");
+  }
   using namespace std::chrono_literals;
   DNSPacket packet;
   if (auto packet_opt = ParseDNSRawPacket(&buffer[0], buffer.size())) {
@@ -35,50 +42,66 @@ void Gateway::ProcessRawPacket(std::vector<uint8_t> buffer,
     fprintf(stderr, "[ERROR] parse packet failed\n");
     return;
   }
-  PrintDNSPacket(packet);
   if (packet.header.flag.qr == 0) {
     if (packet.questions.empty()) {
       fprintf(stderr, "[WARN] empty question\n");
       return;
     }
-    DNSCache::Key key{packet.questions[0].qname, packet.questions[0].qtype,
-                      packet.questions[0].qclass};
+    if (packet.header.flag.to_host() != kStandardQuery) {
+      fprintf(stderr, "[WARN] not a standard query\n");
+      PrintDNSPacket(packet);
+    }
 
-    auto records = dns_cache_->query(key);
+    DNSCache::Key key = packet.raw_questions;
 
-    auto do_when_records_not_empty = [&]() {
-      fprintf(stderr, "[INFO] cache hit\n");
-      for (auto &[key, record] : records) {
-        dns_answer ans;
-        ans.name = std::get<0>(key);
-        ans.type = std::get<1>(key);
-        ans.ans_class = std::get<2>(key);
-        ans.ttl = 100; // TODO(lingsong.feng): use actual TTL
-        ans.rdata = record;
-        packet.answers.push_back(std::move(ans));
+    auto cb = [addr, key, packet, gateway_weak = weak_from_this()]() {
+      fprintf(stderr, "[INFO] callback called\n");
+      if (auto gateway = gateway_weak.lock()) {
+        fprintf(stderr, "[INFO] cache hit!\n");
+        if (auto ans = gateway->dns_cache_->query(key)) {
+          auto reply_header = packet.header;
+          reply_header.flag.from_host(kStandardResponse);
+          auto raw_reply_bufer = generate_dns_raw_from_raw_parts(
+              reply_header, key, ans->second, packet.get_qdcount(), ans->first);
+          gateway->udp_socket_.SendTo(raw_reply_bufer, addr);
+        } else {
+          fprintf(stderr, "[WARN] cache missed in callback\n");
+        }
+      } else {
+        fprintf(stderr, "[WARN] gateway released\n");
       }
-      packet.header.flag.from_host(kStandardResponse);
-
-      auto buffer = GenerateDNSRawPacket(packet);
-      udp_socket_.SendTo(buffer, addr);
     };
 
-    if (!records.empty()) {
-      do_when_records_not_empty();
+    if (auto ans = dns_cache_->query_or_register_callback(key, cb)) {
+      fprintf(stderr, "[INFO] cache hit!\n");
+      auto reply_header = packet.header;
+      reply_header.flag.from_host(kStandardResponse);
+      auto raw_reply_bufer = generate_dns_raw_from_raw_parts(
+          reply_header, key, ans->second, packet.get_qdcount(), ans->first);
+      udp_socket_.SendTo(raw_reply_bufer, addr);
       return;
     } else {
-      fprintf(stderr, "cache missed\n");
+      fprintf(stderr, "[INFO] cache missed\n");
+      udp_socket_.SendTo(buffer, base::SocketAddr("114.114.114.114:53"));
     }
 
     // TODO(lingsong.feng): exponential backoff
 
   } else {
     // response
-    dns_cache_->update(packet.answers);
+    if (packet.header.flag.to_host() != kStandardResponse) {
+      fprintf(stderr, "[WARN] not a standard response\n");
+      PrintDNSPacket(packet);
+      return;
+    }
+    dns_cache_->update(packet);
   }
 }
 
 void Gateway::Run() {
+  if (!initialized_) {
+    fprintf(stderr, "[ERROR] gateway not initialized\n");
+  }
 
   while (true) {
     // TODO(lingsong.feng): specify with a constant
