@@ -8,19 +8,32 @@ namespace base {
 
 // static
 std::shared_ptr<ThreadPool> ThreadPool::MakeShared(int number_of_threads) {
-  return std::shared_ptr<ThreadPool>(new ThreadPool(number_of_threads));
+  return std::shared_ptr<ThreadPool>(new ThreadPool());
 }
 
-ThreadPool::ThreadPool(int number_of_threads) {
+// static
+ThreadPool *ThreadPool::GetInstance() {
+  static ThreadPool instance;
+  return &instance;
+}
+
+void ThreadPool::Initialize(int number_of_threads) {
+  initialized_ = true;
+
   round_robin_counter = 0;
   for (int i = 0; i < number_of_threads; i++) {
     handlers_.emplace_back();
   }
 }
 
+ThreadPool::ThreadPool() {}
+
 void ThreadPool::PostTask(std::function<void()> &&func) {
   std::lock_guard<std::mutex> lg(mutex_);
-
+  if (!initialized_) {
+    fprintf(stderr, "[ERROR] thread pool is not initialized\n");
+    return;
+  }
   handlers_[round_robin_counter].PostTask(std::move(func));
   round_robin_counter = (round_robin_counter + 1) % handlers_.size();
 }
@@ -36,6 +49,10 @@ int ThreadPool::GetNumberOfThreads() {
 
 void ThreadPool::Shutdown() {
   std::lock_guard<std::mutex> lg(mutex_);
+  if (!initialized_) {
+    fprintf(stderr, "[ERROR] thread pool is not initialized\n");
+    return;
+  }
   for (auto &handler : handlers_) {
     handler.Shutdown();
   }
