@@ -5,7 +5,6 @@
 #include <netinet/in.h>
 #include <optional>
 #include <string>
-#include <sys/_types/_socklen_t.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <variant>
@@ -15,8 +14,8 @@ namespace base {
 
 std::string to_string(const IPv4Addr &addr) {
   char s[20];
-  snprintf(s, 20, "%hhu.%hhu.%hhu.%hhu", addr.octets[0], addr.octets[1], addr.octets[2],
-           addr.octets[3]);
+  snprintf(s, 20, "%hhu.%hhu.%hhu.%hhu", addr.octets[0], addr.octets[1],
+           addr.octets[2], addr.octets[3]);
   std::string ret = s;
   return ret;
 }
@@ -34,13 +33,13 @@ std::string to_string(const SocketAddr &addr) {
 }
 
 // static
-Result<UDPSocket> UDPSocket::Bind(SocketAddr addr) {
+std::optional<UDPSocket> UDPSocket::Bind(SocketAddr addr) {
   UDPSocket udp_socket;
   udp_socket.socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
   if (udp_socket.socket_fd_ < 0) {
     // TODO(lingsong.feng): elegant returning
     printf("socket create error\n");
-    exit(-1);
+    return {};
   }
 
   struct sockaddr_in server_addr;
@@ -55,10 +54,10 @@ Result<UDPSocket> UDPSocket::Bind(SocketAddr addr) {
            sizeof(server_addr)) < 0) {
     // TODO(lingsong.feng): elegant returning
     printf("bind error\n");
-    exit(-1);
+    return {};
   }
 
-  return Result<UDPSocket>::Ok(std::move(udp_socket));
+  return udp_socket;
 }
 
 UDPSocket::UDPSocket() = default;
@@ -86,12 +85,12 @@ UDPSocket::RecvFrom(std::span<uint8_t> buffer) {
 
   SocketAddr socket_addr(addr_v4);
 
-  return 
-      {{bytes_received, socket_addr}};
+  return {{bytes_received, socket_addr}};
 }
 
 // TODO(lingsong.feng): thread safety check
-Result<std::uint64_t> UDPSocket::SendTo(std::span<uint8_t> buffer, const SocketAddr& addr) {
+std::optional<std::uint64_t> UDPSocket::SendTo(std::span<uint8_t> buffer,
+                                               const SocketAddr &addr) {
   struct sockaddr_in dst_addr;
   socklen_t addr_len = sizeof(dst_addr);
   memset(&dst_addr, 0, sizeof(dst_addr));
@@ -102,9 +101,10 @@ Result<std::uint64_t> UDPSocket::SendTo(std::span<uint8_t> buffer, const SocketA
   auto addr_s = to_string(v4_addr.ip);
   dst_addr.sin_addr.s_addr = inet_addr(addr_s.c_str());
 
-  uint64_t rv = sendto(socket_fd_, &buffer[0], buffer.size(), 0, (const struct sockaddr*)&dst_addr, addr_len);
+  uint64_t rv = sendto(socket_fd_, &buffer[0], buffer.size(), 0,
+                       (const struct sockaddr *)&dst_addr, addr_len);
 
-  return Result<std::uint64_t>::Ok(rv);
+  return rv;
 }
 
 } // namespace base

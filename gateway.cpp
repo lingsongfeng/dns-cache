@@ -1,5 +1,6 @@
 #include "gateway.h"
 #include "base/net/udp_socket.h"
+#include "base/threading/thread_pool.h"
 #include "dns/dns_packet.h"
 #include "dns_cache.h"
 #include <cstdio>
@@ -9,15 +10,13 @@
 #include <thread>
 #include <vector>
 
+// TODO(lingsong.feng): consider unwrap null optional
 Gateway::Gateway()
-    : udp_socket_(
-          base::UDPSocket::Bind(base::SocketAddr("0.0.0.0:53")).unwrap()),
-      thread_pool_(base::ThreadPool::MakeShared(10)) {}
+    : udp_socket_(*base::UDPSocket::Bind(base::SocketAddr("0.0.0.0:53"))) {}
 
 void Gateway::Initialize() {
   initialized_ = true;
-  dns_cache_ = dns_cache_ =
-      std::make_shared<DNSCache>(weak_from_this(), thread_pool_);
+  dns_cache_ = dns_cache_ = std::make_shared<DNSCache>(weak_from_this());
 }
 
 void Gateway::Send(const DNSPacket &dns_packet) {
@@ -85,8 +84,6 @@ void Gateway::ProcessRawPacket(std::vector<uint8_t> buffer,
       udp_socket_.SendTo(buffer, base::SocketAddr("114.114.114.114:53"));
     }
 
-    // TODO(lingsong.feng): exponential backoff
-
   } else {
     // response
     if (packet.header.flag.to_host() != kStandardResponse) {
@@ -113,9 +110,10 @@ void Gateway::Run() {
              base::to_string(addr).c_str());
       buffer.resize(cnt);
 
-      thread_pool_->PostTask([this, buffer = std::move(buffer), addr]() {
-        ProcessRawPacket(std::move(buffer), addr);
-      });
+      base::ThreadPool::GetInstance()->PostTask(
+          [this, buffer = std::move(buffer), addr]() {
+            ProcessRawPacket(std::move(buffer), addr);
+          });
 
     } else {
       fprintf(stderr, "[WARN] udp socket recvfrom failed\n");

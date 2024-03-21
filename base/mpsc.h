@@ -79,6 +79,10 @@ public:
 
   T recv() const { return inner_->recv(); }
 
+  std::optional<T> recv_no_block() const {
+    return inner_->recv_no_block();
+  }
+
   template <class Rep, class Period>
   std::optional<T>
   recv_timeout(const std::chrono::duration<Rep, Period> &rel_time) const {
@@ -104,6 +108,7 @@ public:
   }
   Receiver(Receiver &&) = default;
   Receiver &operator=(Receiver &&) = default;
+
   T recv() {
     std::unique_lock<std::mutex> lk(mutex_);
     condvar_.wait(lk, [this]() { return !queue_.empty(); });
@@ -111,6 +116,17 @@ public:
     queue_.pop();
     lk.unlock();
     return ret;
+  }
+
+  std::optional<T> recv_no_block() {
+    std::lock_guard<std::mutex> lg(mutex_);
+    if (queue_.empty()) {
+      return {};
+    } else {
+      T rv = std::move(queue_.front());
+      queue_.pop();
+      return rv;
+    }
   }
 
   template <class Rep, class Period>

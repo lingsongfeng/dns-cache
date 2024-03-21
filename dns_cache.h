@@ -2,6 +2,7 @@
 #define DNS_CACHE_H_
 
 #include "base/threading/thread_pool.h"
+#include "base/threading/timer.h"
 #include "dns/dns_packet.h"
 #include <chrono>
 #include <functional>
@@ -16,8 +17,7 @@ class Gateway;
 
 class DNSCache : public std::enable_shared_from_this<DNSCache> {
 public:
-  DNSCache(std::weak_ptr<Gateway> gateway,
-           std::weak_ptr<base::ThreadPool> thread_pool);
+  DNSCache(std::weak_ptr<Gateway> gateway);
 
   // raw dns questions(bytes)
   using Key = std::vector<uint8_t>;
@@ -35,13 +35,15 @@ public:
   query_or_register_callback(
       const Key &key, std::function<void()> &&cb = []() {});
 
+  void clean();
+
   void update(const DNSPacket &packet);
 
 private:
   std::map<Key, Value> mp_;
   std::mutex mutex_;
-  std::weak_ptr<base::ThreadPool> thread_pool_;
   std::weak_ptr<Gateway> gateway_;
+  base::Timer clean_timer_;
 };
 
 #endif

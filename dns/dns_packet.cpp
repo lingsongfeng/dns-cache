@@ -1,15 +1,11 @@
 
 #include "dns/dns_packet.h"
-#include <_types/_uint16_t.h>
-#include <_types/_uint32_t.h>
-#include <_types/_uint8_t.h>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <optional>
 #include <span>
 #include <string>
-#include <sys/_endian.h>
 #include <vector>
 
 // TODO(lingsong.feng): bit order is not well organized, which will be optimized

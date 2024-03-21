@@ -11,34 +11,6 @@
 
 namespace base {
 
-// TODO
-struct Error {};
-
-template <typename T> struct Result {
-public:
-  Result(T t) : inner_(std::move(t)) {
-
-  }
-  bool IsErr() { return std::get_if<Error>(inner_); }
-  T &unwrap() {
-    T *ptr = std::get_if<T>(&inner_);
-    if (ptr) {
-      return *ptr;
-    } else {
-      // TODO(lingsong.feng): implement an elegant halting
-      printf("unwrap failed\n");
-      exit(-1);
-    }
-  }
-  static Result Ok(T t) {
-    Result result(std::move(t));
-    return result;
-  }
-
-private:
-  std::variant<T, Error> inner_;
-};
-
 struct IPv4Addr {
   std::array<uint8_t, 4> octets;
 };
@@ -79,11 +51,11 @@ private:
   UDPSocket();
 
 public:
-  static Result<UDPSocket> Bind(SocketAddr addr);
+  static std::optional<UDPSocket> Bind(SocketAddr addr);
 
   std::optional<std::pair<std::uint64_t, SocketAddr>> RecvFrom(std::span<uint8_t> buffer);
 
-  Result<std::uint64_t> SendTo(std::span<uint8_t> buffer, const SocketAddr& addr);
+  std::optional<uint64_t> SendTo(std::span<uint8_t> buffer, const SocketAddr& addr);
 
 private:
   int socket_fd_;

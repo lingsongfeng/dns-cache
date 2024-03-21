@@ -34,7 +34,6 @@ public:
 private:
   bool initialized_ = false;
   base::UDPSocket udp_socket_;
-  std::shared_ptr<base::ThreadPool> thread_pool_;
   std::shared_ptr<DNSCache> dns_cache_;
 };
 

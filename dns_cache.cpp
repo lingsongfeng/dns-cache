@@ -1,5 +1,3 @@
-
-#include <_types/_uint16_t.h>
 #include <chrono>
 #include <cstdio>
 #include <ctime>
@@ -29,9 +27,9 @@ is_expired(const std::chrono::time_point<std::chrono::system_clock> &t) {
 
 }; // namespace
 
-DNSCache::DNSCache(std::weak_ptr<Gateway> gateway,
-                   std::weak_ptr<base::ThreadPool> thread_pool)
-    : thread_pool_(thread_pool), gateway_(gateway) {}
+using namespace std::chrono_literals;
+DNSCache::DNSCache(std::weak_ptr<Gateway> gateway)
+    : gateway_(gateway), clean_timer_([] {}, 100s) {}
 
 std::optional<std::pair<int, std::vector<uint8_t>>>
 DNSCache::query(const Key &key) {
@@ -92,12 +90,13 @@ void DNSCache::update(const DNSPacket &packet) {
   if (auto iter = mp_.find(key); iter != mp_.end()) {
     auto cbs = std::move(std::get<3>(iter->second));
     iter->second = value;
-    if (auto thread_pool = thread_pool_.lock()) {
-      for (auto &&cb : cbs) {
-        thread_pool->PostTask(std::move(cb));
-      }
+    for (auto &&cb : cbs) {
+      base::ThreadPool::GetInstance()->PostTask(std::move(cb));
     }
   } else {
     mp_.insert({key, value});
   }
 }
+
+// TODO(lingsong.feng)
+void DNSCache::clean() { }
