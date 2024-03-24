@@ -139,6 +139,7 @@ public:
       lk.unlock();
       return ret;
     } else {
+      lk.unlock();
       return {};
     }
   }
