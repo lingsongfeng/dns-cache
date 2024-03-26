@@ -12,11 +12,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/logging.h"
 #include "base/mpsc.h"
 #include "base/threading/thread_pool.h"
 #include "dns/dns_packet.h"
 #include "dns_cache.h"
 #include "gateway.h"
+
+using namespace base::log_level;
 
 namespace {
 
@@ -41,7 +44,7 @@ DNSCache::query(const Key &key) {
     if (!is_expired(expire_time)) {
       return {{std::get<0>(iter->second), std::get<1>(iter->second)}};
     } else {
-      fprintf(stderr, "[INFO] record expired\n");
+      base::log(INFO, "record expired");
     }
   }
 
@@ -60,7 +63,7 @@ DNSCache::query_or_register_callback(const Key &key,
       return {{std::get<0>(iter->second), std::get<1>(iter->second)}};
     } else {
       std::get<3>(iter->second).push_back(std::move(cb));
-      fprintf(stderr, "[INFO] record expired\n");
+      base::log(INFO, "record expired");
     }
   } else {
     Value value;
@@ -99,4 +102,4 @@ void DNSCache::update(const DNSPacket &packet) {
 }
 
 // TODO(lingsong.feng)
-void DNSCache::clean() { }
+void DNSCache::clean() {}
