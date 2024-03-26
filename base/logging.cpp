@@ -58,6 +58,7 @@ void log_inner(int level, const char *s,
                const std::vector<std::string> &args_v) {
   auto tokens = tokenize(s);
   int cnt = 0;
+  // FIXME: use thread safe print functions
   std::cout << '[' << to_cstr(level) << "] ";
   for (auto token : tokens) {
     if (token == "{}") {
