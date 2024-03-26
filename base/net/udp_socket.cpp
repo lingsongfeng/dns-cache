@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <variant>
 #include <vector>
+#include <cstring>
 
 namespace base {
 

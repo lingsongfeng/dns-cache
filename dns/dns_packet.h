@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <optional>
 
 constexpr const uint16_t kStandardQuery = 0x0100;
 constexpr const uint16_t kStandardResponse = 0x8180;

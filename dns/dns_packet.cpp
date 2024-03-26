@@ -7,6 +7,7 @@
 #include <span>
 #include <string>
 #include <vector>
+#include <arpa/inet.h>
 
 // TODO(lingsong.feng): bit order is not well organized, which will be optimized
 // in the future
